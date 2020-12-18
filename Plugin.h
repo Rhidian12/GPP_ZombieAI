@@ -4,12 +4,13 @@
 
 class IBaseInterface;
 class IExamInterface;
+class BehaviorTree;
 
 class Plugin :public IExamPlugin
 {
 public:
 	Plugin() {};
-	virtual ~Plugin() {};
+	virtual ~Plugin();
 
 	void Initialize(IBaseInterface* pInterface, PluginInfo& info) override;
 	void DllInit() override;
@@ -33,6 +34,8 @@ private:
 	bool m_UseItem = false; //Demo purpose
 	bool m_RemoveItem = false; //Demo purpose
 	float m_AngSpeed = 0.f; //Demo purpose
+
+	BehaviorTree* m_pBehaviorTree;
 };
 
 //ENTRY

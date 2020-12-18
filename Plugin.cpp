@@ -1,7 +1,13 @@
 #include "stdafx.h"
 #include "Plugin.h"
 #include "IExamInterface.h"
+#include "Blackboard.h"
+#include "BehaviorTree.h"
 
+Plugin::~Plugin()
+{
+	SAFE_DELETE(m_pBehaviorTree);
+}
 //Called only once, during initialization
 void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 {
@@ -11,12 +17,156 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 
 	//Bit information about the plugin
 	//Please fill this in!!
-	info.BotName = "BotNameTEST";
-	info.Student_FirstName = "Foo";
-	info.Student_LastName = "Bar";
-	info.Student_Class = "2DAEx";
-}
+	info.BotName = "Version00";
+	info.Student_FirstName = "Rhidian";
+	info.Student_LastName = "De Wit";
+	info.Student_Class = "2DAE01";
 
+	// == Create Blackboard ==
+	Blackboard* pBlackboard{ new Blackboard{} };
+
+	// == Add Data To Blackboard ==
+	pBlackboard->AddData("agentPosition", m_pInterface->Agent_GetInfo().Position);
+	pBlackboard->AddData("agentSize", m_pInterface->Agent_GetInfo().AgentSize);
+	pBlackboard->AddData("isAgentBitten", m_pInterface->Agent_GetInfo().Bitten);
+	pBlackboard->AddData("agentAngularVelocity", m_pInterface->Agent_GetInfo().AngularVelocity);
+	pBlackboard->AddData("agentCurrentSpeed", m_pInterface->Agent_GetInfo().CurrentLinearSpeed);
+	pBlackboard->AddData("agentEnergy", m_pInterface->Agent_GetInfo().Energy);
+	pBlackboard->AddData("agentHealth", m_pInterface->Agent_GetInfo().Health);
+	pBlackboard->AddData("agentGrabRange", m_pInterface->Agent_GetInfo().GrabRange);
+	pBlackboard->AddData("isAgentInHouse", m_pInterface->Agent_GetInfo().IsInHouse);
+	pBlackboard->AddData("agentVelocity", m_pInterface->Agent_GetInfo().LinearVelocity);
+	pBlackboard->AddData("agentMaxSpeed", m_pInterface->Agent_GetInfo().MaxLinearSpeed);
+	pBlackboard->AddData("agentOrientation", m_pInterface->Agent_GetInfo().Orientation);
+	pBlackboard->AddData("isAgentRunning", m_pInterface->Agent_GetInfo().RunMode);
+	pBlackboard->AddData("agentStamina", m_pInterface->Agent_GetInfo().Stamina);
+
+	m_pBehaviorTree = new BehaviorTree
+	{pBlackboard,
+		new BehaviorSelector{
+			{
+				new BehaviorSequence{ // == DANGER ACTIONS ==
+					{
+						new BehaviorConditional{AreZombiesNearby},
+						new BehaviorSelector{
+							{
+								new BehaviorSequence{
+									{
+										new BehaviorConditional{IsGunLoaded},
+										new BehaviorAction{FireGunAtZombie}
+									}},
+								new BehaviorSequence{
+									{
+										new BehaviorConditional{IsGunNotLoaded},
+										new BehaviorAction{RunAway}
+									}}
+							}}
+					}},
+				new BehaviorSequence{ // == FIND PICKUPS ==
+					{
+						new BehaviorConditional{ArePickupsNearby},
+						new BehaviorSelector{
+							{
+								new BehaviorSequence{
+									{
+										new BehaviorConditional{IsHealthAboveHalf},
+										new BehaviorSelector{
+											{
+												new BehaviorSequence{
+													{
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsAmmoNearby},
+																new BehaviorAction{GoToAmmoPickup}
+															}},
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsAmmoInGrabRange},
+																new BehaviorAction{GrabAmmo}
+															}}
+													}},
+												new BehaviorSequence{
+													{
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsHealthNearby},
+																new BehaviorAction{GoToHealthPickup}
+															}},
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsHealthInGrabRange},
+																new BehaviorAction{GrabHealth}
+															}}
+													}},
+												new BehaviorSequence{
+													{
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsFoodNeaby},
+																new BehaviorAction{GoToFoodPickup}
+															}},
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsFoodInGrabRange},
+																new BehaviorAction{GrabFood}
+															}}
+													}}
+											}},
+
+									}},
+								new BehaviorSequence{
+									{
+										new BehaviorConditional{IsHealthBelowHalf},
+										new BehaviorSelector{
+											{
+												new BehaviorSequence{
+													{
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsAmmoNearby},
+																new BehaviorAction{GoToAmmoPickup}
+															}},
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsAmmoInGrabRange},
+																new BehaviorAction{GrabAmmo}
+															}}
+													}},
+												new BehaviorSequence{
+													{
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsHealthNearby},
+																new BehaviorAction{GoToHealthPickup}
+															}},
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsHealthInGrabRange},
+																new BehaviorAction{GrabHealth}
+															}}
+													}},
+												new BehaviorSequence{
+													{
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsFoodNeaby},
+																new BehaviorAction{GoToFoodPickup}
+															}},
+														new BehaviorSequence{
+															{
+																new BehaviorConditional{IsFoodInGrabRange},
+																new BehaviorAction{GrabFood}
+															}}
+													}}
+											}},
+
+									}}
+							}}
+					}},
+				new BehaviorAction{Wander} // == WANDER AROUND ==
+			}}
+	};
+}
 //Called only once
 void Plugin::DllInit()
 {
