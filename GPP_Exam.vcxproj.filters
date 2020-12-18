@@ -1,11 +1,41 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClCompile Include="Plugin.cpp" />
     <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="Plugin.cpp">
+      <Filter>Plugin</Filter>
+    </ClCompile>
+    <ClCompile Include="BehaviorTree.cpp">
+      <Filter>DecisionMaking\BehaviourTree</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Plugin.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="Blackboard.h">
+      <Filter>Blackboard</Filter>
+    </ClInclude>
+    <ClInclude Include="Plugin.h">
+      <Filter>Plugin</Filter>
+    </ClInclude>
+    <ClInclude Include="BehaviorTree.h">
+      <Filter>DecisionMaking\BehaviourTree</Filter>
+    </ClInclude>
+    <ClInclude Include="DecisionMaking.h">
+      <Filter>DecisionMaking</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Blackboard">
+      <UniqueIdentifier>{3dea7b36-f9d6-4928-bb4a-03cbfa4da7d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Plugin">
+      <UniqueIdentifier>{9c6c4c32-84b8-4671-9695-7f162c109324}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="DecisionMaking">
+      <UniqueIdentifier>{cbbab7cd-00fe-4fe4-b876-0fd27277fabc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="DecisionMaking\BehaviourTree">
+      <UniqueIdentifier>{80297f36-99b6-4ca3-b03b-737e29bc122e}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
 </Project>
