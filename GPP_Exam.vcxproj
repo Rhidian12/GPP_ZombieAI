@@ -183,6 +183,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="BehaviorTree.h" />
+    <ClInclude Include="Behaviours.h" />
     <ClInclude Include="Blackboard.h" />
     <ClInclude Include="DecisionMaking.h" />
     <ClInclude Include="Plugin.h" />

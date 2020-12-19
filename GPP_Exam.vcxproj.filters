@@ -23,6 +23,9 @@
     <ClInclude Include="DecisionMaking.h">
       <Filter>DecisionMaking</Filter>
     </ClInclude>
+    <ClInclude Include="Behaviours.h">
+      <Filter>DecisionMaking\Behaviours</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Blackboard">
@@ -36,6 +39,9 @@
     </Filter>
     <Filter Include="DecisionMaking\BehaviourTree">
       <UniqueIdentifier>{80297f36-99b6-4ca3-b03b-737e29bc122e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="DecisionMaking\Behaviours">
+      <UniqueIdentifier>{a64b4576-609b-4194-a954-78e196197c4f}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

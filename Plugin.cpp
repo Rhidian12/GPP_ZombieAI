@@ -3,6 +3,7 @@
 #include "IExamInterface.h"
 #include "Blackboard.h"
 #include "BehaviorTree.h"
+#include "Behaviours.h"
 
 Plugin::~Plugin()
 {
@@ -26,145 +27,138 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 	Blackboard* pBlackboard{ new Blackboard{} };
 
 	// == Add Data To Blackboard ==
-	pBlackboard->AddData("agentPosition", m_pInterface->Agent_GetInfo().Position);
-	pBlackboard->AddData("agentSize", m_pInterface->Agent_GetInfo().AgentSize);
-	pBlackboard->AddData("isAgentBitten", m_pInterface->Agent_GetInfo().Bitten);
-	pBlackboard->AddData("agentAngularVelocity", m_pInterface->Agent_GetInfo().AngularVelocity);
-	pBlackboard->AddData("agentCurrentSpeed", m_pInterface->Agent_GetInfo().CurrentLinearSpeed);
-	pBlackboard->AddData("agentEnergy", m_pInterface->Agent_GetInfo().Energy);
-	pBlackboard->AddData("agentHealth", m_pInterface->Agent_GetInfo().Health);
-	pBlackboard->AddData("agentGrabRange", m_pInterface->Agent_GetInfo().GrabRange);
-	pBlackboard->AddData("isAgentInHouse", m_pInterface->Agent_GetInfo().IsInHouse);
-	pBlackboard->AddData("agentVelocity", m_pInterface->Agent_GetInfo().LinearVelocity);
-	pBlackboard->AddData("agentMaxSpeed", m_pInterface->Agent_GetInfo().MaxLinearSpeed);
-	pBlackboard->AddData("agentOrientation", m_pInterface->Agent_GetInfo().Orientation);
-	pBlackboard->AddData("isAgentRunning", m_pInterface->Agent_GetInfo().RunMode);
-	pBlackboard->AddData("agentStamina", m_pInterface->Agent_GetInfo().Stamina);
+	pBlackboard->AddData("agentInfo", m_pInterface->Agent_GetInfo());
+	pBlackboard->AddData("entitiesInFOV", GetEntitiesInFOV());
+	SteeringPlugin_Output steeringOutput{};
+	pBlackboard->AddData("steeringOutput", steeringOutput);
+	pBlackboard->AddData("interface", m_pInterface);
+	float timerForCheckingOurBack{};
+	pBlackboard->AddData("timerForCheckingOurBack", timerForCheckingOurBack);
 
 	m_pBehaviorTree = new BehaviorTree
-	{pBlackboard,
+	{ pBlackboard,
 		new BehaviorSelector{
 			{
 				new BehaviorSequence{ // == DANGER ACTIONS ==
 					{
-						new BehaviorConditional{AreZombiesNearby},
+						new BehaviorConditional{AreZombiesInFOV},
 						new BehaviorSelector{
 							{
-								new BehaviorSequence{
-									{
-										new BehaviorConditional{IsGunLoaded},
-										new BehaviorAction{FireGunAtZombie}
-									}},
+								//new BehaviorSequence{
+								//	{
+								//		new BehaviorConditional{IsGunLoaded},
+								//		new BehaviorAction{FireGunAtZombie}
+								//	}},
 								new BehaviorSequence{
 									{
 										new BehaviorConditional{IsGunNotLoaded},
-										new BehaviorAction{RunAway}
+										new BehaviorAction{Wander}
 									}}
 							}}
 					}},
-				new BehaviorSequence{ // == FIND PICKUPS ==
-					{
-						new BehaviorConditional{ArePickupsNearby},
-						new BehaviorSelector{
-							{
-								new BehaviorSequence{
-									{
-										new BehaviorConditional{IsHealthAboveHalf},
-										new BehaviorSelector{
-											{
-												new BehaviorSequence{
-													{
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsAmmoNearby},
-																new BehaviorAction{GoToAmmoPickup}
-															}},
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsAmmoInGrabRange},
-																new BehaviorAction{GrabAmmo}
-															}}
-													}},
-												new BehaviorSequence{
-													{
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsHealthNearby},
-																new BehaviorAction{GoToHealthPickup}
-															}},
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsHealthInGrabRange},
-																new BehaviorAction{GrabHealth}
-															}}
-													}},
-												new BehaviorSequence{
-													{
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsFoodNeaby},
-																new BehaviorAction{GoToFoodPickup}
-															}},
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsFoodInGrabRange},
-																new BehaviorAction{GrabFood}
-															}}
-													}}
-											}},
+		//new BehaviorSequence{ // == FIND PICKUPS ==
+		//	{
+		//		new BehaviorConditional{ArePickupsNearby},
+		//		new BehaviorSelector{
+		//			{
+		//				new BehaviorSequence{
+		//					{
+		//						new BehaviorConditional{IsHealthAboveHalf},
+		//						new BehaviorSelector{
+		//							{
+		//								new BehaviorSequence{
+		//									{
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsAmmoNearby},
+		//												new BehaviorAction{GoToAmmoPickup}
+		//											}},
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsAmmoInGrabRange},
+		//												new BehaviorAction{GrabAmmo}
+		//											}}
+		//									}},
+		//								new BehaviorSequence{
+		//									{
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsHealthNearby},
+		//												new BehaviorAction{GoToHealthPickup}
+		//											}},
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsHealthInGrabRange},
+		//												new BehaviorAction{GrabHealth}
+		//											}}
+		//									}},
+		//								new BehaviorSequence{
+		//									{
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsFoodNeaby},
+		//												new BehaviorAction{GoToFoodPickup}
+		//											}},
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsFoodInGrabRange},
+		//												new BehaviorAction{GrabFood}
+		//											}}
+		//									}}
+		//							}},
 
-									}},
-								new BehaviorSequence{
-									{
-										new BehaviorConditional{IsHealthBelowHalf},
-										new BehaviorSelector{
-											{
-												new BehaviorSequence{
-													{
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsAmmoNearby},
-																new BehaviorAction{GoToAmmoPickup}
-															}},
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsAmmoInGrabRange},
-																new BehaviorAction{GrabAmmo}
-															}}
-													}},
-												new BehaviorSequence{
-													{
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsHealthNearby},
-																new BehaviorAction{GoToHealthPickup}
-															}},
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsHealthInGrabRange},
-																new BehaviorAction{GrabHealth}
-															}}
-													}},
-												new BehaviorSequence{
-													{
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsFoodNeaby},
-																new BehaviorAction{GoToFoodPickup}
-															}},
-														new BehaviorSequence{
-															{
-																new BehaviorConditional{IsFoodInGrabRange},
-																new BehaviorAction{GrabFood}
-															}}
-													}}
-											}},
+		//					}},
+		//				new BehaviorSequence{
+		//					{
+		//						new BehaviorConditional{IsHealthBelowHalf},
+		//						new BehaviorSelector{
+		//							{
+		//								new BehaviorSequence{
+		//									{
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsAmmoNearby},
+		//												new BehaviorAction{GoToAmmoPickup}
+		//											}},
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsAmmoInGrabRange},
+		//												new BehaviorAction{GrabAmmo}
+		//											}}
+		//									}},
+		//								new BehaviorSequence{
+		//									{
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsHealthNearby},
+		//												new BehaviorAction{GoToHealthPickup}
+		//											}},
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsHealthInGrabRange},
+		//												new BehaviorAction{GrabHealth}
+		//											}}
+		//									}},
+		//								new BehaviorSequence{
+		//									{
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsFoodNeaby},
+		//												new BehaviorAction{GoToFoodPickup}
+		//											}},
+		//										new BehaviorSequence{
+		//											{
+		//												new BehaviorConditional{IsFoodInGrabRange},
+		//												new BehaviorAction{GrabFood}
+		//											}}
+		//									}}
+		//							}},
 
-									}}
-							}}
-					}},
-				new BehaviorAction{Wander} // == WANDER AROUND ==
-			}}
+		//					}}
+		//			}}
+		//	}},
+		new BehaviorAction{Wander} // == WANDER AROUND ==
+	}}
 	};
 }
 //Called only once
@@ -237,78 +231,92 @@ void Plugin::Update(float dt)
 //This function calculates the new SteeringOutput, called once per frame
 SteeringPlugin_Output Plugin::UpdateSteering(float dt)
 {
-	auto steering = SteeringPlugin_Output();
+#pragma region DEMO
+	//auto steering = SteeringPlugin_Output();
 
-	//Use the Interface (IAssignmentInterface) to 'interface' with the AI_Framework
-	auto agentInfo = m_pInterface->Agent_GetInfo();
+	////Use the Interface (IAssignmentInterface) to 'interface' with the AI_Framework
+	//auto agentInfo = m_pInterface->Agent_GetInfo();
 
-	auto nextTargetPos = m_Target; //To start you can use the mouse position as guidance
+	//auto nextTargetPos = m_Target; //To start you can use the mouse position as guidance
 
-	auto vHousesInFOV = GetHousesInFOV();//uses m_pInterface->Fov_GetHouseByIndex(...)
-	auto vEntitiesInFOV = GetEntitiesInFOV(); //uses m_pInterface->Fov_GetEntityByIndex(...)
+	//auto vHousesInFOV = GetHousesInFOV();//uses m_pInterface->Fov_GetHouseByIndex(...)
+	//auto vEntitiesInFOV = GetEntitiesInFOV(); //uses m_pInterface->Fov_GetEntityByIndex(...)
 
-	for (auto& e : vEntitiesInFOV)
-	{
-		if (e.Type == eEntityType::PURGEZONE)
-		{
-			PurgeZoneInfo zoneInfo;
-			m_pInterface->PurgeZone_GetInfo(e, zoneInfo);
-			std::cout << "Purge Zone in FOV:" << e.Location.x << ", "<< e.Location.y <<  " ---EntityHash: " << e.EntityHash << "---Radius: "<< zoneInfo.Radius << std::endl;
-		}
-	}
-	
+	//for (auto& e : vEntitiesInFOV)
+	//{
+	//	if (e.Type == eEntityType::PURGEZONE)
+	//	{
+	//		PurgeZoneInfo zoneInfo;
+	//		m_pInterface->PurgeZone_GetInfo(e, zoneInfo);
+	//		std::cout << "Purge Zone in FOV:" << e.Location.x << ", "<< e.Location.y <<  " ---EntityHash: " << e.EntityHash << "---Radius: "<< zoneInfo.Radius << std::endl;
+	//	}
+	//}
+	//
+	////INVENTORY USAGE DEMO
+	////********************
 
-	//INVENTORY USAGE DEMO
-	//********************
+	//if (m_GrabItem)
+	//{
+	//	ItemInfo item;
+	//	//Item_Grab > When DebugParams.AutoGrabClosestItem is TRUE, the Item_Grab function returns the closest item in range
+	//	//Keep in mind that DebugParams are only used for debugging purposes, by default this flag is FALSE
+	//	//Otherwise, use GetEntitiesInFOV() to retrieve a vector of all entities in the FOV (EntityInfo)
+	//	//Item_Grab gives you the ItemInfo back, based on the passed EntityHash (retrieved by GetEntitiesInFOV)
+	//	if (m_pInterface->Item_Grab({}, item))
+	//	{
+	//		//Once grabbed, you can add it to a specific inventory slot
+	//		//Slot must be empty
+	//		m_pInterface->Inventory_AddItem(0, item);
+	//	}
+	//}
 
-	if (m_GrabItem)
-	{
-		ItemInfo item;
-		//Item_Grab > When DebugParams.AutoGrabClosestItem is TRUE, the Item_Grab function returns the closest item in range
-		//Keep in mind that DebugParams are only used for debugging purposes, by default this flag is FALSE
-		//Otherwise, use GetEntitiesInFOV() to retrieve a vector of all entities in the FOV (EntityInfo)
-		//Item_Grab gives you the ItemInfo back, based on the passed EntityHash (retrieved by GetEntitiesInFOV)
-		if (m_pInterface->Item_Grab({}, item))
-		{
-			//Once grabbed, you can add it to a specific inventory slot
-			//Slot must be empty
-			m_pInterface->Inventory_AddItem(0, item);
-		}
-	}
+	//if (m_UseItem)
+	//{
+	//	//Use an item (make sure there is an item at the given inventory slot)
+	//	m_pInterface->Inventory_UseItem(0);
+	//}
 
-	if (m_UseItem)
-	{
-		//Use an item (make sure there is an item at the given inventory slot)
-		m_pInterface->Inventory_UseItem(0);
-	}
+	//if (m_RemoveItem)
+	//{
+	//	//Remove an item from a inventory slot
+	//	m_pInterface->Inventory_RemoveItem(0);
+	//}
 
-	if (m_RemoveItem)
-	{
-		//Remove an item from a inventory slot
-		m_pInterface->Inventory_RemoveItem(0);
-	}
+	////Simple Seek Behaviour (towards Target)
+	//steering.LinearVelocity = nextTargetPos - agentInfo.Position; //Desired Velocity
+	//steering.LinearVelocity.Normalize(); //Normalize Desired Velocity
+	//steering.LinearVelocity *= agentInfo.MaxLinearSpeed; //Rescale to Max Speed
 
-	//Simple Seek Behaviour (towards Target)
-	steering.LinearVelocity = nextTargetPos - agentInfo.Position; //Desired Velocity
-	steering.LinearVelocity.Normalize(); //Normalize Desired Velocity
-	steering.LinearVelocity *= agentInfo.MaxLinearSpeed; //Rescale to Max Speed
+	//if (Distance(nextTargetPos, agentInfo.Position) < 2.f)
+	//{
+	//	steering.LinearVelocity = Elite::ZeroVector2;
+	//}
 
-	if (Distance(nextTargetPos, agentInfo.Position) < 2.f)
-	{
-		steering.LinearVelocity = Elite::ZeroVector2;
-	}
+	////steering.AngularVelocity = m_AngSpeed; //Rotate your character to inspect the world while walking
+	//steering.AutoOrient = true; //Setting AutoOrientate to TRue overrides the AngularVelocity
 
-	//steering.AngularVelocity = m_AngSpeed; //Rotate your character to inspect the world while walking
-	steering.AutoOrient = true; //Setting AutoOrientate to TRue overrides the AngularVelocity
+	//steering.RunMode = m_CanRun; //If RunMode is True > MaxLinSpd is increased for a limited time (till your stamina runs out)
 
-	steering.RunMode = m_CanRun; //If RunMode is True > MaxLinSpd is increased for a limited time (till your stamina runs out)
+	//							 //SteeringPlugin_Output is works the exact same way a SteeringBehaviour output
 
-								 //SteeringPlugin_Output is works the exact same way a SteeringBehaviour output
+	//							 //@End (Demo Purposes)
+	//m_GrabItem = false; //Reset State
+	//m_UseItem = false;
+	//m_RemoveItem = false;
 
-								 //@End (Demo Purposes)
-	m_GrabItem = false; //Reset State
-	m_UseItem = false;
-	m_RemoveItem = false;
+	//return steering;
+
+#pragma endregion
+#pragma region UpdateBlackboard
+	m_pBehaviorTree->GetBlackboard()->ChangeData("entitiesInFOV", GetEntitiesInFOV());
+	float timerForCheckingOurBack{};
+	m_pBehaviorTree->GetBlackboard()->GetData("timerForCheckingOurBack", timerForCheckingOurBack);
+	m_pBehaviorTree->GetBlackboard()->ChangeData("timerForCheckingOurBack", (timerForCheckingOurBack + dt));
+#pragma endregion
+
+	m_pBehaviorTree->Update(dt);
+	SteeringPlugin_Output steering{};
+	m_pBehaviorTree->GetBlackboard()->GetData("steeringOutput", steering);
 
 	return steering;
 }
