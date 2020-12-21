@@ -6,7 +6,27 @@ class IBaseInterface;
 class IExamInterface;
 class BehaviorTree;
 
-class Plugin :public IExamPlugin
+struct EntityInfoExtended : EntityInfo
+{
+	EntityInfo entity;
+	std::string hash;
+};
+struct EntityInfoExtendedHash
+{
+	size_t operator()(const EntityInfoExtended& entity) const
+	{
+		return std::hash<std::string>()(entity.hash);
+	}
+};
+struct EntityInfoExtendedEqual
+{
+	bool operator()(const EntityInfoExtended& a, const EntityInfoExtended& b) const
+	{
+		return a.EntityHash == b.EntityHash;
+	}
+};
+
+class Plugin : public IExamPlugin
 {
 public:
 	Plugin() {};
@@ -35,7 +55,7 @@ private:
 	bool m_RemoveItem = false; //Demo purpose
 	float m_AngSpeed = 0.f; //Demo purpose
 
-	BehaviorTree* m_pBehaviorTree;
+	BehaviorTree* m_pBehaviorTree{ nullptr };
 };
 
 //ENTRY
