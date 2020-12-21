@@ -188,6 +188,7 @@
     <ClInclude Include="DecisionMaking.h" />
     <ClInclude Include="Plugin.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="Structs.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BehaviorTree.cpp" />

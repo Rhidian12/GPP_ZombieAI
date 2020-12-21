@@ -26,6 +26,9 @@
     <ClInclude Include="Behaviours.h">
       <Filter>DecisionMaking\Behaviours</Filter>
     </ClInclude>
+    <ClInclude Include="Structs.h">
+      <Filter>Structs</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Blackboard">
@@ -42,6 +45,9 @@
     </Filter>
     <Filter Include="DecisionMaking\Behaviours">
       <UniqueIdentifier>{a64b4576-609b-4194-a954-78e196197c4f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Structs">
+      <UniqueIdentifier>{0280d3cd-8ec4-48ff-85ed-f78517bf3d68}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

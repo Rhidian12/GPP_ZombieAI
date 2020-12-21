@@ -40,13 +40,11 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 	pBlackboard->AddData("timeSpentSprinting", timeSpentSprinting);
 	float degreesTurned{};
 	pBlackboard->AddData("degreesTurned", degreesTurned);
-	std::unordered_set<EntityInfoExtended, EntityInfoExtendedHash, EntityInfoExtendedEqual> enemiesBehindUs{};
-	pBlackboard->AddData("enemiesBehindUs", enemiesBehindUs);
+	//pBlackboard->AddData("enemiesBehindUs", m_EnemiesBehindUs);
 	float deltaTime{};
 	pBlackboard->AddData("deltaTime", deltaTime);
 	float timerForWander{ 1.f };
 	pBlackboard->AddData("timerForWander", timerForWander);
-	std::vector<std::pair<bool, Elite::Vector2>> checkpoints{};
 	auto worldInfo{ m_pInterface->World_GetInfo() };
 	const Elite::Vector2 leftBot{ worldInfo.Center.x - worldInfo.Dimensions.x * 0.5f,worldInfo.Center.y - worldInfo.Dimensions.y * 0.5f };
 	const int checkPointsXDirection{ int(worldInfo.Dimensions.x / m_pInterface->Agent_GetInfo().FOV_Range) };
@@ -58,16 +56,20 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 			if (y == 0)
 			{
 				const Elite::Vector2 checkpoint{ leftBot.x + (FOVRange * x),leftBot.y + FOVRange };
-				checkpoints.push_back(std::make_pair(false,checkpoint));
+				m_Checkpoints.push_back(Checkpoint{ checkpoint });
 			}
 			else
 			{
 				const Elite::Vector2 checkpoint{ leftBot.x + (FOVRange * x),worldInfo.Dimensions.y * 0.5f - FOVRange };
-				checkpoints.push_back(std::make_pair(false, checkpoint));
+				m_Checkpoints.push_back(Checkpoint{ checkpoint });
 			}
 		}
 	}
-	pBlackboard->AddData("checkpoints", checkpoints);
+	pBlackboard->AddData("checkpoints", &m_Checkpoints);
+	pBlackboard->AddData("housePositions", &m_HousePositions);
+	pBlackboard->AddData("locationOfNearestPistol", &m_LocationOfNearestPistol);
+	pBlackboard->AddData("locationOfNearestMedkit", &m_LocationOfNearestMedkit);
+	pBlackboard->AddData("locationOfNearestFood", &m_LocationOfNearestFood);
 
 	m_pBehaviorTree = new BehaviorTree
 	{ pBlackboard,
@@ -94,121 +96,76 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 				new BehaviorSequence{ // == LOOK FOR HOUSE ==
 					{
 						new BehaviorConditional{IsHouseInFOV},
+						new BehaviorConditional{HasHouseNotBeenEntered},
 						new BehaviorAction{EnterHouse}
 					}},
 				new BehaviorSequence{ // == SEARCH PATTERN ==
 					{
 						new BehaviorConditional{HaveNotAllCheckpointsBeenReached},
+						new BehaviorAction{GoToUnvisitedCheckpoint}
 					}},
-					//new BehaviorSequence{ // == FIND PICKUPS ==
-					//	{
-					//		new BehaviorConditional{ArePickupsNearby},
-					//		new BehaviorSelector{
-					//			{
-					//				new BehaviorSequence{
-					//					{
-					//						new BehaviorConditional{IsHealthAboveHalf},
-					//						new BehaviorSelector{
-					//							{
-					//								new BehaviorSequence{
-					//									{
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsAmmoNearby},
-					//												new BehaviorAction{GoToAmmoPickup}
-					//											}},
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsAmmoInGrabRange},
-					//												new BehaviorAction{GrabAmmo}
-					//											}}
-					//									}},
-					//								new BehaviorSequence{
-					//									{
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsHealthNearby},
-					//												new BehaviorAction{GoToHealthPickup}
-					//											}},
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsHealthInGrabRange},
-					//												new BehaviorAction{GrabHealth}
-					//											}}
-					//									}},
-					//								new BehaviorSequence{
-					//									{
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsFoodNeaby},
-					//												new BehaviorAction{GoToFoodPickup}
-					//											}},
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsFoodInGrabRange},
-					//												new BehaviorAction{GrabFood}
-					//											}}
-					//									}}
-					//							}},
+		new BehaviorSequence{ // == FIND PICKUPS ==
+			{
+				new BehaviorConditional{ArePickupsInFOV},
+				new BehaviorSelector{
+					{
+						new BehaviorSequence{
+							{
+								new BehaviorConditional{IsHealthAboveHalf},
+								new BehaviorSelector{
+									{
+										new BehaviorSequence{
+											{
+												new BehaviorSequence{
+													{
+														new BehaviorConditional{IsPistolInFOV},
+														new BehaviorAction{GoToPistol}
+													}},
+												new BehaviorSequence{
+													{
+														new BehaviorConditional{IsPistolInGrabRange},
+														new BehaviorAction{GrabPistol}
+													}}
+											}},
+										new BehaviorSequence{
+											{
+												new BehaviorSequence{
+													{
+														new BehaviorConditional{IsMedkitInFOV},
+														new BehaviorAction{GoToMedkit}
+													}},
+												new BehaviorSequence{
+													{
+														new BehaviorConditional{IsMedkitInGrabRange},
+														new BehaviorAction{GrabMedkit}
+													}}
+											}},
+										new BehaviorSequence{
+											{
+												new BehaviorSequence{
+													{
+														new BehaviorConditional{IsFoodInFOV},
+														new BehaviorAction{GoToFood}
+													}},
+												new BehaviorSequence{
+													{
+														new BehaviorConditional{IsFoodInGrabRange},
+														new BehaviorAction{GrabFood}
+													}}
+											}}
+									}},
 
-					//					}},
-					//				new BehaviorSequence{
-					//					{
-					//						new BehaviorConditional{IsHealthBelowHalf},
-					//						new BehaviorSelector{
-					//							{
-					//								new BehaviorSequence{
-					//									{
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsAmmoNearby},
-					//												new BehaviorAction{GoToAmmoPickup}
-					//											}},
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsAmmoInGrabRange},
-					//												new BehaviorAction{GrabAmmo}
-					//											}}
-					//									}},
-					//								new BehaviorSequence{
-					//									{
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsHealthNearby},
-					//												new BehaviorAction{GoToHealthPickup}
-					//											}},
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsHealthInGrabRange},
-					//												new BehaviorAction{GrabHealth}
-					//											}}
-					//									}},
-					//								new BehaviorSequence{
-					//									{
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsFoodNeaby},
-					//												new BehaviorAction{GoToFoodPickup}
-					//											}},
-					//										new BehaviorSequence{
-					//											{
-					//												new BehaviorConditional{IsFoodInGrabRange},
-					//												new BehaviorAction{GrabFood}
-					//											}}
-					//									}}
-					//							}},
-
-					//					}}
-					//			}}
-					//	}},
-							//new BehaviorSequence{ == PROJECT FOR LATER ==
-							//{
-							//		new BehaviorConditional{HaveFiveSecondsPassed},
-							//		new BehaviorAction{Sprint},
-							//		new BehaviorConditional{HasSprintedForThreeSeconds},
-							//		new BehaviorAction{TurnAroundToCheckForZombies},
-							//}},
-							new BehaviorAction{Wander} // == WANDER AROUND ==
+							}},
+					}}
+			}},
+				//new BehaviorSequence{ == PROJECT FOR LATER ==
+				//{
+				//		new BehaviorConditional{HaveFiveSecondsPassed},
+				//		new BehaviorAction{Sprint},
+				//		new BehaviorConditional{HasSprintedForThreeSeconds},
+				//		new BehaviorAction{TurnAroundToCheckForZombies},
+				//}},
+				new BehaviorAction{Wander} // == WANDER AROUND ==
 				}}
 	};
 }
@@ -381,6 +338,18 @@ SteeringPlugin_Output Plugin::UpdateSteering(float dt)
 	{
 		m_pBehaviorTree->GetBlackboard()->ChangeData("timerForWander", (timerForWander + dt));
 	}
+	// == Update Checkpoints ==
+	const Rectf agentHitbox{ m_pInterface->Agent_GetInfo().Position,m_pInterface->Agent_GetInfo().AgentSize,m_pInterface->Agent_GetInfo().AgentSize };
+	for (auto& checkpoint : m_Checkpoints)
+	{
+		const float checkpointSize{ 5.f };
+		const Rectf checkpointHitbox{ checkpoint.position,checkpointSize,checkpointSize };
+		if (IsOverlapping(agentHitbox, checkpointHitbox))
+		{
+			checkpoint.hasBeenReached = true;
+			break; // we can only hit one checkpoint
+		}
+	}
 
 #pragma endregion
 
@@ -397,10 +366,25 @@ void Plugin::Render(float dt) const
 	//This Render function should only contain calls to Interface->Draw_... functions
 	m_pInterface->Draw_SolidCircle(m_Target, .7f, { 0,0 }, { 1, 0, 0 });
 
-	std::vector<std::pair<bool, Elite::Vector2>> checkpoints{};
-	m_pBehaviorTree->GetBlackboard()->GetData("checkpoints", checkpoints);
-	for (const auto& point : checkpoints)
-		m_pInterface->Draw_Point(point.second, 5.f, { 1.f,0.f,0.f });
+	for (const auto& point : m_Checkpoints)
+		m_pInterface->Draw_Point(point.position, 5.f, { 1.f,0.f,0.f });
+}
+
+bool Plugin::IsOverlapping(const Rectf& a, const Rectf& b) const
+{
+	// If one rectangle is on left side of the other
+	if (a.bottomLeft.x + a.width < b.bottomLeft.x || b.bottomLeft.x + b.width < a.bottomLeft.x)
+	{
+		return false;
+	}
+
+	// If one rectangle is under the other
+	if (a.bottomLeft.y > b.bottomLeft.y + b.height || b.bottomLeft.y > a.bottomLeft.y + a.height)
+	{
+		return false;
+	}
+
+	return true;
 }
 
 vector<HouseInfo> Plugin::GetHousesInFOV() const

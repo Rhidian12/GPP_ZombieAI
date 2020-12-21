@@ -1,30 +1,13 @@
 #pragma once
 #include "IExamPlugin.h"
 #include "Exam_HelperStructs.h"
+#include "Structs.h"
+#include <unordered_set>
+#include <utility>
 
 class IBaseInterface;
 class IExamInterface;
 class BehaviorTree;
-
-struct EntityInfoExtended : EntityInfo
-{
-	EntityInfo entity;
-	std::string hash;
-};
-struct EntityInfoExtendedHash
-{
-	size_t operator()(const EntityInfoExtended& entity) const
-	{
-		return std::hash<std::string>()(entity.hash);
-	}
-};
-struct EntityInfoExtendedEqual
-{
-	bool operator()(const EntityInfoExtended& a, const EntityInfoExtended& b) const
-	{
-		return a.EntityHash == b.EntityHash;
-	}
-};
 
 class Plugin : public IExamPlugin
 {
@@ -43,6 +26,8 @@ public:
 	void Render(float dt) const override;
 
 private:
+	bool IsOverlapping(const Rectf& a, const Rectf& b) const;
+
 	//Interface, used to request data from/perform actions with the AI Framework
 	IExamInterface* m_pInterface = nullptr;
 	vector<HouseInfo> GetHousesInFOV() const;
@@ -56,6 +41,12 @@ private:
 	float m_AngSpeed = 0.f; //Demo purpose
 
 	BehaviorTree* m_pBehaviorTree{ nullptr };
+	//std::unordered_set<EntityInfoExtended, EntityInfoExtendedHash, EntityInfoExtendedEqual> m_EnemiesBehindUs{};
+	std::vector<Checkpoint> m_Checkpoints{};
+	std::unordered_set<Elite::Vector2, Vector2Hash, Vector2Equal> m_HousePositions{};
+	EntityInfo m_LocationOfNearestPistol{};
+	EntityInfo m_LocationOfNearestMedkit{};
+	EntityInfo m_LocationOfNearestFood{};
 };
 
 //ENTRY
