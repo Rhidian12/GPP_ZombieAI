@@ -1,5 +1,6 @@
 #pragma once
 #include "stdafx.h"
+#include "Exam_HelperStructs.h"
 struct EntityInfoExtended : EntityInfo
 {
 	EntityInfo entity;
@@ -63,4 +64,57 @@ struct Checkpoint
 	}
 	bool hasBeenReached{};
 	Elite::Vector2 position{};
+};
+struct Item 
+{
+	Item()
+		: Item{ {},eItemType::GARBAGE }
+	{
+	}
+	Item(const Elite::Vector2& position, const eItemType& type)
+		: position{position}
+		, type{ type }
+		, hasBeenPickedUp{}
+	{
+	}
+	eItemType type{};
+	Elite::Vector2 position{};
+	bool hasBeenPickedUp{};
+};
+struct House
+{
+	House(const Elite::Vector2& position)
+		: position{ position }
+		, hasBeenVisited{}
+	{
+	}
+	Elite::Vector2 position{};
+	bool hasBeenVisited{};
+};
+struct HouseHash
+{
+	size_t operator()(const House& a) const
+	{
+		const int largePrimeOne{ 73856093 };
+		const int largePrimeTwo{ 19349663 };
+		const int hashTableSize{ 199 };
+		return (int(a.position.x * largePrimeOne) ^ int(a.position.y * largePrimeTwo)) % hashTableSize;
+	}
+};
+struct HouseEqual
+{
+	bool operator()(const House& a, const House& b) const
+	{
+		return (Elite::AreEqual(a.position.x, b.position.x) && Elite::AreEqual(a.position.y, b.position.y)) && (a.hasBeenVisited == b.hasBeenVisited);
+	}
+};
+struct ItemsInInventory
+{
+	int nrOfPistols{};
+	int nrOfMedkits{};
+	int nrOfFood{};
+
+	int maxNrOfPistols{ 2 };
+	int maxNrOfMedkits{ 2 };
+	int maxNrOfFood{ 1 };
 };

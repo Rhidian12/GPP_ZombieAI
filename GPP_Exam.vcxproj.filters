@@ -8,6 +8,9 @@
     <ClCompile Include="BehaviorTree.cpp">
       <Filter>DecisionMaking\BehaviourTree</Filter>
     </ClCompile>
+    <ClCompile Include="Functions.cpp">
+      <Filter>Functions</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h" />
@@ -29,6 +32,9 @@
     <ClInclude Include="Structs.h">
       <Filter>Structs</Filter>
     </ClInclude>
+    <ClInclude Include="Functions.h">
+      <Filter>Functions</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Blackboard">
@@ -48,6 +54,9 @@
     </Filter>
     <Filter Include="Structs">
       <UniqueIdentifier>{0280d3cd-8ec4-48ff-85ed-f78517bf3d68}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Functions">
+      <UniqueIdentifier>{78294f7c-3b8c-4a00-bf65-0b64012aa40b}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

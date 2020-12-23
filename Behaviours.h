@@ -4,6 +4,87 @@
 #include "BehaviorTree.h"
 #include "Structs.h"
 #include <unordered_set>
+#include "Functions.h"
+#include <set>
+#include <vector>
+// ===========================
+// ===========================
+//	HELPER FUNCTIONS
+// ===========================
+// ===========================
+bool CalculateNearestMissingItem(Blackboard* pBlackboard)
+{
+	IExamInterface* pInterface{};
+	std::vector<EntityInfo>* items{};
+	EntityInfo nearestMissingItem{};
+	bool dataAvailable{ pBlackboard->GetData("interface",pInterface) && pBlackboard->GetData("items",items)
+				 && pBlackboard->GetData("nearestMissingItem",nearestMissingItem) };
+	if (!dataAvailable || items == nullptr)
+		return false;
+
+	bool wasNearestItemChanged{};
+	float smallestDistance{ FLT_MAX };
+	for (const auto& item : *items)
+	{
+		const float squaredDistance{ Elite::DistanceSquared(item.Location,pInterface->Agent_GetInfo().Position) };
+		if (squaredDistance < smallestDistance)
+		{
+			smallestDistance = squaredDistance;
+			nearestMissingItem = item;
+			wasNearestItemChanged = pBlackboard->ChangeData("nearestMissingItem", nearestMissingItem);
+		}
+	}
+
+	return wasNearestItemChanged;
+}
+void CheckIfItemWasErased(Blackboard* pBlackboard)
+{
+	std::vector<EntityInfo>* items{};
+	std::vector<ItemInfo>* inventory{};
+	bool dataAvailable{ pBlackboard->GetData("inventory",inventory) && pBlackboard->GetData("items",items) };
+	if (!dataAvailable || items == nullptr)
+		return;
+
+	for (unsigned int i{}; i < inventory->size(); ++i)
+	{
+		if ((*inventory)[0].ItemHash != 0)
+		{
+			for (auto& item : *items)
+			{
+				auto it = std::find_if(items->begin(), items->end(), [inventory, &i](const EntityInfo& a)->bool
+					{
+						if (a.EntityHash == (*inventory)[i].ItemHash)
+							return true;
+						return false;
+					});
+				if (it != items->end())
+				{
+					items->erase(it);
+					pBlackboard->ChangeData("items", items);
+				}
+			}
+		}
+	}
+}
+bool IsInHouse(Blackboard* pBlackboard)
+{
+	std::vector<HouseInfo> housesInFOV{};
+	IExamInterface* pInterface{};
+	bool dataAvailable{ pBlackboard->GetData("housesInFOV",housesInFOV) && pBlackboard->GetData("interface",pInterface) };
+	if (!dataAvailable)
+		return false;
+
+	if (housesInFOV.empty())
+		return false;
+
+	for(const auto& house : housesInFOV)
+	{
+		const Rectf houseHitbox{ Elite::Vector2{house.Center.x - house.Size.x * 0.5f, house.Center.y - house.Size.y * 0.5f},house.Size.x,house.Size.y };
+		const Rectf agentHitbox{ pInterface->Agent_GetInfo().Position,pInterface->Agent_GetInfo().AgentSize,pInterface->Agent_GetInfo().AgentSize };
+		return Functions::IsOverlapping(agentHitbox, houseHitbox);
+	}
+	return false;
+}
 // ===========================
 // ===========================
 //	CONDITIONALS
@@ -31,21 +112,26 @@ bool AreZombiesInFOV(Blackboard* pBlackboard)
 bool IsGunLoaded(Blackboard* pBlackboard)
 {
 #pragma region Blackboard
-	IExamInterface* pExamInterface{};
-	bool dataAvailable{ pBlackboard->GetData("interface",pExamInterface) };
+	std::vector<ItemInfo>* inventory{};
+	IExamInterface* pInterface{};
+	bool dataAvailable{ pBlackboard->GetData("inventory",inventory) && pBlackboard->GetData("interface",pInterface) };
 
 	if (!dataAvailable)
 		return false;
 #pragma endregion
 
-	auto inventoryCapacity{ pExamInterface->Inventory_GetCapacity() };
-	for (unsigned int i{}; i < inventoryCapacity; ++i)
+	for (size_t i{}; i < inventory->size(); ++i)
 	{
-		ItemInfo itemInfo{};
-		if (pExamInterface->Inventory_GetItem(i, itemInfo))
-			if (itemInfo.Type == eItemType::PISTOL)
-				if (pExamInterface->Weapon_GetAmmo(itemInfo) > 0)
-					return true;
+		if ((*inventory)[i].ItemHash == 0)
+			continue;
+
+		if ((*inventory)[i].Type == eItemType::PISTOL)
+		{
+			if (pInterface->Weapon_GetAmmo((*inventory)[i]) > 0)
+			{
+				return true;
+			}
+		}
 	}
 	return false;
 }
@@ -109,14 +195,47 @@ bool HasSprintedForThreeSeconds(Blackboard* pBlackboard)
 }
 bool IsHouseInFOV(Blackboard* pBlackboard)
 {
+	std::vector<House>* houses{};
 	std::vector<HouseInfo> entities{};
-	bool dataAvailable{ pBlackboard->GetData("housesInFOV", entities) };
+	bool dataAvailable{ pBlackboard->GetData("housesInFOV", entities) && pBlackboard->GetData("houses",houses) };
 	if (!dataAvailable)
 		return false;
 
-	if (entities.empty())
+	for (const auto& house : entities)
+	{
+		auto it = std::find_if(houses->begin(), houses->end(), [house](const House& a)->bool
+			{
+				if (Elite::AreEqual(house.Center.x, a.position.x) && Elite::AreEqual(house.Center.y, a.position.y))
+				{
+					return true;
+				}
+				return false;
+			});
+		if (it != houses->end())
+		{
+			continue;
+		}
+		House temp{ house.Center };
+		houses->push_back(temp);
+		pBlackboard->ChangeData("houses", houses);
+	}
+
+	bool haveAllHousesBeenEntered{ true };
+	for (const auto& house : *houses)
+	{
+		if (!house.hasBeenVisited)
+		{
+			haveAllHousesBeenEntered = false;
+			break;
+		}
+	}
+
+	if (entities.empty() && haveAllHousesBeenEntered)
+	{
 		return false;
-	return true;
+	}
+
+	return true; // If false hasn't been returned by now, there is a house
 }
 bool HaveNotAllCheckpointsBeenReached(Blackboard* pBlackboard)
 {
@@ -132,34 +251,87 @@ bool HaveNotAllCheckpointsBeenReached(Blackboard* pBlackboard)
 }
 bool HasHouseNotBeenEntered(Blackboard* pBlackboard)
 {
-	std::unordered_set<Elite::Vector2, Vector2Hash, Vector2Equal>* housePositions{};
+	std::unordered_set<House, HouseHash, HouseEqual>* houses{};
 	std::vector<HouseInfo> entities{};
-	bool dataAvailable{ pBlackboard->GetData("housesInFOV", entities) && pBlackboard->GetData("housePositions",housePositions) };
+	bool dataAvailable{ pBlackboard->GetData("housesInFOV", entities) && pBlackboard->GetData("housePositions",houses) };
 	if (!dataAvailable)
 		return false;
 
 	bool wasHouseInserted{};
 	for (const auto& house : entities)
-		if (housePositions->insert(house.Center).second)
-			wasHouseInserted = pBlackboard->ChangeData("housePositions", housePositions);
+	{
+		if (houses->insert(house.Center).second)
+		{
+			wasHouseInserted = pBlackboard->ChangeData("houses", houses);
+		}
+	}
 
 	return wasHouseInserted;
 }
 bool ArePickupsInFOV(Blackboard* pBlackboard)
 {
 	std::vector<EntityInfo> entities{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) };
-	if (!dataAvailable || entities.empty())
+	IExamInterface* pInterface{};
+	std::vector<EntityInfo>* items{};
+	ItemsInInventory itemsInInventory{};
+	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface)
+	&& pBlackboard->GetData("items",items) && pBlackboard->GetData("itemsInInventory",itemsInInventory) };
+	if (!dataAvailable)
 		return false;
 
 	for (const auto& entity : entities)
 	{
 		if (entity.Type == eEntityType::ITEM)
 		{
-			return true;
+			ItemInfo itemInfo{};
+			if (pInterface->Item_GetInfo(entity, itemInfo))
+			{
+				if (itemInfo.Type == eItemType::GARBAGE)
+				{
+					continue;
+				}
+
+				switch (itemInfo.Type)
+				{
+				case eItemType::FOOD:
+					if (itemsInInventory.nrOfFood == itemsInInventory.maxNrOfFood)
+						continue;
+					break;
+				case eItemType::PISTOL:
+					if (itemsInInventory.nrOfPistols == itemsInInventory.maxNrOfPistols)
+						continue;
+					break;
+				case eItemType::MEDKIT:
+					if (itemsInInventory.nrOfMedkits == itemsInInventory.maxNrOfMedkits)
+						continue;
+					break;
+				default:
+					break;
+				}
+
+				auto it = std::find_if(items->begin(), items->end(), [entity](const EntityInfo& a)->bool
+					{
+						if (entity.EntityHash == a.EntityHash)
+						{
+							return true;
+						}
+						return false;
+					});
+				if (it != items->end())
+				{
+					continue;
+				}
+				items->push_back(entity);
+				pBlackboard->ChangeData("items", items);
+			}
 		}
 	}
-	return false;
+
+	if (entities.empty() && items->empty())
+	{
+		return false;
+	}
+	return true;
 }
 bool IsHealthAboveHalf(Blackboard* pBlackboard)
 {
@@ -177,164 +349,60 @@ bool IsHealthBelowHalf(Blackboard* pBlackboard)
 {
 	return !IsHealthAboveHalf(pBlackboard);
 }
-bool IsPistolInFOV(Blackboard* pBlackboard)
+bool HasCenterOfHouseNotBeenReached(Blackboard* pBlackboard)
 {
-	std::vector<EntityInfo> entities{};
+	std::vector<House>* houses{};
 	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestPistol{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface)
-				&& pBlackboard->GetData("locationOfNearestPistol",locationOfNearestPistol) };
-	if (!dataAvailable || entities.empty())
+	bool dataAvailable{ pBlackboard->GetData("interface", pInterface) && pBlackboard->GetData("houses",houses) };
+	if (!dataAvailable)
 		return false;
 
-	float smallestDistance{ FLT_MAX };
-	bool wasPistolFound{};
-	for (const auto& entity : entities)
+	for (auto& house : *houses)
 	{
-		if (entity.Type == eEntityType::ITEM)
+		if (house.hasBeenVisited)
 		{
-			ItemInfo itemInfo{};
-			if (pInterface->Item_GetInfo(entity, itemInfo))
-			{
-				if (itemInfo.Type == eItemType::PISTOL)
-				{
-					const float squaredDistance{ Elite::DistanceSquared(pInterface->Agent_GetInfo().Position,entity.Location) };
-					if (squaredDistance < smallestDistance)
-					{
-						locationOfNearestPistol->Location = entity.Location;
-						smallestDistance = squaredDistance;
-						wasPistolFound = true;
-					}
-				}
-			}
+			continue;
+		}
+		const float houseSize{ 5.f };
+		const Rectf houseCenterHitbox{ Elite::Vector2{house.position.x, house.position.y},houseSize,houseSize };
+		const Rectf agentHitbox{ pInterface->Agent_GetInfo().Position,pInterface->Agent_GetInfo().AgentSize,pInterface->Agent_GetInfo().AgentSize };
+		if (Functions::IsOverlapping(agentHitbox, houseCenterHitbox))
+		{
+			house.hasBeenVisited = true;
+			return false;
 		}
 	}
-
-	if (wasPistolFound)
-		return pBlackboard->ChangeData("locationOfNearestPistol", locationOfNearestPistol);
-	return false;
+	return true;
 }
-bool IsPistolInGrabRange(Blackboard* pBlackboard)
+bool IsInventoryNotFull(Blackboard* pBlackboard)
 {
-	std::vector<EntityInfo> entities{};
 	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestPistol{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface) 
-					&& pBlackboard->GetData("locationOfNearestPistol",locationOfNearestPistol) };
-	if (!dataAvailable || entities.empty())
+	std::vector<ItemInfo>* inventory{};
+	bool dataAvailable{ pBlackboard->GetData("inventory", inventory) };
+	if (!dataAvailable)
 		return false;
 
-	if (Elite::DistanceSquared(locationOfNearestPistol->Location, pInterface->Agent_GetInfo().Position) <= Elite::Square(pInterface->Agent_GetInfo().GrabRange))
-		return true;
-	return false;
-}
-bool IsMedkitInFOV(Blackboard* pBlackboard)
-{
-	std::vector<EntityInfo> entities{};
-	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestMedkit{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface)
-				&& pBlackboard->GetData("locationOfNearestMedkit",locationOfNearestMedkit) };
-	if (!dataAvailable || entities.empty())
-		return false;
-
-	float smallestDistance{ FLT_MAX };
-	bool wasMedkitFound{};
-	for (const auto& entity : entities)
+	for (const auto& item : *inventory)
 	{
-		if (entity.Type == eEntityType::ITEM)
-		{
-			ItemInfo itemInfo{};
-			if (pInterface->Item_GetInfo(entity, itemInfo))
-			{
-				if (itemInfo.Type == eItemType::PISTOL)
-				{
-					const float squaredDistance{ Elite::DistanceSquared(pInterface->Agent_GetInfo().Position,entity.Location) };
-					if (squaredDistance < smallestDistance)
-					{
-						locationOfNearestMedkit->Location = entity.Location;
-						smallestDistance = squaredDistance;
-						wasMedkitFound = true;
-					}
-				}
-			}
-		}
+		if (item.ItemHash == 0)
+			return true;
 	}
-
-	if (wasMedkitFound)
-		return pBlackboard->ChangeData("locationOfNearestMedkit", locationOfNearestMedkit);
 	return false;
 }
-bool IsMedkitInGrabRange(Blackboard* pBlackboard)
+bool IsFirstItemInGrabRange(Blackboard* pBlackboard)
 {
-	std::vector<EntityInfo> entities{};
 	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestMedkit{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface)
-					&& pBlackboard->GetData("locationOfNearestMedkit",locationOfNearestMedkit) };
-	if (!dataAvailable || entities.empty())
+	std::vector<EntityInfo>* items{};
+	bool dataAvailable{ pBlackboard->GetData("items",items) && pBlackboard->GetData("interface",pInterface) };
+	if (!dataAvailable)
 		return false;
 
-	if (Elite::DistanceSquared(locationOfNearestMedkit->Location, pInterface->Agent_GetInfo().Position) <= Elite::Square(pInterface->Agent_GetInfo().GrabRange))
-		return true;
-	return false;
-}
-bool IsFoodInFOV(Blackboard* pBlackboard)
-{
-	std::vector<EntityInfo> entities{};
-	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestFood{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface)
-				&& pBlackboard->GetData("locationOfNearestFood",locationOfNearestFood) };
-	if (!dataAvailable || entities.empty())
+	if (items->empty())
 		return false;
 
-	float smallestDistance{ FLT_MAX };
-	bool wasFoodFound{};
-	for (const auto& entity : entities)
-	{
-		if (entity.Type == eEntityType::ITEM)
-		{
-			ItemInfo itemInfo{};
-			if (pInterface->Item_GetInfo(entity, itemInfo))
-			{
-				if (itemInfo.Type == eItemType::PISTOL)
-				{
-					const float squaredDistance{ Elite::DistanceSquared(pInterface->Agent_GetInfo().Position,entity.Location) };
-					if (squaredDistance < smallestDistance)
-					{
-						locationOfNearestFood->Location = entity.Location;
-						smallestDistance = squaredDistance;
-						wasFoodFound = true;
-					}
-				}
-			}
-		}
-	}
-
-	if (wasFoodFound)
-		return pBlackboard->ChangeData("locationOfNearestFood", locationOfNearestFood);
-	return false;
+	return (Elite::DistanceSquared((*items)[0].Location, pInterface->Agent_GetInfo().Position)
+		<= Elite::Square(pInterface->Agent_GetInfo().GrabRange));
 }
-bool IsFoodInGrabRange(Blackboard* pBlackboard)
-{
-	std::vector<EntityInfo> entities{};
-	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestFood{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface)
-					&& pBlackboard->GetData("locationOfNearestFood",locationOfNearestFood) };
-	if (!dataAvailable || entities.empty())
-		return false;
-
-	if (Elite::DistanceSquared(locationOfNearestFood->Location, pInterface->Agent_GetInfo().Position) <= Elite::Square(pInterface->Agent_GetInfo().GrabRange))
-		return true;
-	return false;
-}
-// ===========================
-// ===========================
-//	ACTIONS
-// ===========================
-// ===========================
 // ===========================
 // ===========================
 //	STEERING BEHAVIOURS
@@ -403,7 +471,7 @@ void Evade(Blackboard* pBlackboard, const EnemyInfo& target, Elite::Vector2& pat
 {
 	AgentInfo agentInfo{};
 	IExamInterface* pInterface{};
-	bool dataAvailable{ pBlackboard->GetData("agentInfo",agentInfo)	&& pBlackboard->GetData("interface",pInterface) };
+	bool dataAvailable{ pBlackboard->GetData("agentInfo",agentInfo) && pBlackboard->GetData("interface",pInterface) };
 
 	if (!dataAvailable)
 		return;
@@ -563,6 +631,10 @@ BehaviorState RunAway(Blackboard* pBlackboard)
 		}
 	}
 
+	steering.RunMode = true;
+
+
+
 	if (Seek(pBlackboard, finalEscapePath))
 	{
 		steering.RunMode = true;
@@ -572,36 +644,25 @@ BehaviorState RunAway(Blackboard* pBlackboard)
 }
 BehaviorState EnterHouse(Blackboard* pBlackboard)
 {
-	std::vector<HouseInfo>* houseInFOV{};
+	std::vector<HouseInfo> houseInFOV{};
 	SteeringPlugin_Output steering{};
 	AgentInfo agentInfo{};
+	std::vector<House>* houses{};
 	bool dataAvailable{ pBlackboard->GetData("housesInFOV",houseInFOV) && pBlackboard->GetData("steeringOutput",steering)
-					&& pBlackboard->GetData("agentInfo",agentInfo) };
+					&& pBlackboard->GetData("agentInfo",agentInfo) && pBlackboard->GetData("houses",houses) };
 	if (!dataAvailable)
 		return BehaviorState::Failure;
 
-	if (houseInFOV->size() == 1)
+	for (const auto& house : *houses)
 	{
-		if (Seek(pBlackboard, (*houseInFOV)[0].Center))
+		if (house.hasBeenVisited)
+		{
+			continue;
+		}
+		if (Seek(pBlackboard, house.position))
 		{
 			return BehaviorState::Success;
 		}
-	}
-	else
-	{
-		float smallestDistance{ FLT_MAX };
-		Elite::Vector2 closestHouse{};
-		for (const auto& house : *houseInFOV)
-		{
-			const float distanceSquared{ Elite::DistanceSquared(agentInfo.Position,house.Center) };
-			if (distanceSquared <= smallestDistance)
-			{
-				smallestDistance = distanceSquared;
-				closestHouse = house.Center;
-			}
-		}
-		if (Seek(pBlackboard, closestHouse))
-			return BehaviorState::Success;
 	}
 	return BehaviorState::Failure;
 }
@@ -622,84 +683,68 @@ BehaviorState GoToUnvisitedCheckpoint(Blackboard* pBlackboard)
 	}
 	return BehaviorState::Failure;
 }
-BehaviorState GoToPistol(Blackboard* pBlackboard)
+BehaviorState GoToFirstItem(Blackboard* pBlackboard)
 {
-	std::vector<EntityInfo> entities{};
-	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestPistol{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface)
-					&& pBlackboard->GetData("locationOfNearestPistol",locationOfNearestPistol) };
-	if (!dataAvailable || entities.empty())
-		return BehaviorState::Failure;
-
-	if (Seek(pBlackboard,locationOfNearestPistol->Location))
-		return BehaviorState::Success;
-	return BehaviorState::Failure;
-}
-BehaviorState GoToMedkit(Blackboard* pBlackboard)
-{
-	std::vector<EntityInfo> entities{};
-	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestMedkit{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface)
-					&& pBlackboard->GetData("locationOfNearestMedkit",locationOfNearestMedkit) };
-	if (!dataAvailable || entities.empty())
-		return BehaviorState::Failure;
-
-	if (Seek(pBlackboard, locationOfNearestMedkit->Location))
-		return BehaviorState::Success;
-	return BehaviorState::Failure;
-}
-BehaviorState GoToFood(Blackboard* pBlackboard)
-{
-	std::vector<EntityInfo> entities{};
-	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestFood{};
-	bool dataAvailable{ pBlackboard->GetData("entitiesInFOV",entities) && pBlackboard->GetData("interface",pInterface)
-					&& pBlackboard->GetData("locationOfNearestFood",locationOfNearestFood) };
-	if (!dataAvailable || entities.empty())
-		return BehaviorState::Failure;
-
-	if (Seek(pBlackboard, locationOfNearestFood->Location))
-		return BehaviorState::Success;
-	return BehaviorState::Failure;
-}
-BehaviorState GrabPistol(Blackboard* pBlackboard)
-{
-	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestPistol{};
-	bool dataAvailable{ pBlackboard->GetData("interface",pInterface) && pBlackboard->GetData("locationOfNearestPistol",locationOfNearestPistol ) };
+	std::vector<EntityInfo>* items{};
+	bool dataAvailable{ pBlackboard->GetData("items",items) };
 	if (!dataAvailable)
 		return BehaviorState::Failure;
 
-	ItemInfo itemInfo{};
-	if (pInterface->Item_Grab(*locationOfNearestPistol, itemInfo))
+	if (items->empty())
+		return BehaviorState::Failure;
+
+	if (Seek(pBlackboard, (*items)[0].Location))
+	{
 		return BehaviorState::Success;
+	}
 	return BehaviorState::Failure;
 }
-BehaviorState GrabMedkit(Blackboard* pBlackboard)
+BehaviorState GrabFirstItem(Blackboard* pBlackboard)
 {
 	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestMedkit{};
-	bool dataAvailable{ pBlackboard->GetData("interface",pInterface) && pBlackboard->GetData("locationOfNearestMedkit",locationOfNearestMedkit) };
+	std::vector<ItemInfo>* inventory{};
+	std::vector<EntityInfo>* items{};
+	ItemsInInventory itemsInInventory{};
+	bool dataAvailable{ pBlackboard->GetData("interface",pInterface) && pBlackboard->GetData("inventory",inventory)
+					&& pBlackboard->GetData("items",items) && pBlackboard->GetData("itemsInInventory",itemsInInventory) };
 	if (!dataAvailable)
 		return BehaviorState::Failure;
 
-	ItemInfo itemInfo{};
-	if (pInterface->Item_Grab(*locationOfNearestMedkit, itemInfo))
-		return BehaviorState::Success;
-	return BehaviorState::Failure;
-}
-BehaviorState GrabFood(Blackboard* pBlackboard)
-{
-	IExamInterface* pInterface{};
-	EntityInfo* locationOfNearestFood{};
-	bool dataAvailable{ pBlackboard->GetData("interface",pInterface) && pBlackboard->GetData("locationOfNearestFood",locationOfNearestFood) };
-	if (!dataAvailable)
-		return BehaviorState::Failure;
+	for (auto& item : *items)
+	{
+		ItemInfo itemInfo{};
+		if (pInterface->Item_Grab(item, itemInfo))
+		{
+			switch (itemInfo.Type)
+			{
+			case eItemType::FOOD:
+				++itemsInInventory.nrOfFood;
+				break;
+			case eItemType::MEDKIT:
+				++itemsInInventory.nrOfMedkits;
+				break;
+			case eItemType::PISTOL:
+				++itemsInInventory.nrOfPistols;
+				break;
+			default:
+				break;
+			}
+			pBlackboard->ChangeData("itemsInInventory", itemsInInventory);
 
-	ItemInfo itemInfo{};
-	if (pInterface->Item_Grab(*locationOfNearestFood, itemInfo))
-		return BehaviorState::Success;
+			for (unsigned int i{}; i < inventory->size(); ++i)
+			{
+				if ((*inventory)[i].ItemHash == 0)
+				{
+					// no item in the slot
+					pInterface->Inventory_AddItem(i, itemInfo);
+					(*inventory)[i] = itemInfo;
+					pBlackboard->ChangeData("inventory", inventory);
+					items->erase(items->begin()); // delete the first element
+					CheckIfItemWasErased(pBlackboard);
+					return BehaviorState::Success;
+				}
+			}
+		}
+	}
 	return BehaviorState::Failure;
 }

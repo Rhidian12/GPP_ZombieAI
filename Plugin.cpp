@@ -5,6 +5,8 @@
 #include "BehaviorTree.h"
 #include "Behaviours.h"
 #include <unordered_set>
+#include "Functions.h"
+#include <set>
 
 Plugin::~Plugin()
 {
@@ -24,6 +26,13 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 	info.Student_LastName = "De Wit";
 	info.Student_Class = "2DAE01";
 
+	m_Inventory.reserve(m_pInterface->Inventory_GetCapacity());
+	m_Inventory.resize(m_pInterface->Inventory_GetCapacity());
+	for (int i{}; i < 5; ++i)
+	{
+		m_Inventory[i] = ItemInfo{};
+	}
+
 	// == Create Blackboard ==
 	Blackboard* pBlackboard{ new Blackboard{} };
 
@@ -40,7 +49,6 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 	pBlackboard->AddData("timeSpentSprinting", timeSpentSprinting);
 	float degreesTurned{};
 	pBlackboard->AddData("degreesTurned", degreesTurned);
-	//pBlackboard->AddData("enemiesBehindUs", m_EnemiesBehindUs);
 	float deltaTime{};
 	pBlackboard->AddData("deltaTime", deltaTime);
 	float timerForWander{ 1.f };
@@ -65,11 +73,22 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 			}
 		}
 	}
+	for (size_t i{ 2 }; i < m_Checkpoints.size(); i += 4)
+	{
+		auto temp{ m_Checkpoints[i] };
+		m_Checkpoints[i] = m_Checkpoints[i + 1];
+		m_Checkpoints[i + 1] = temp;
+	}
 	pBlackboard->AddData("checkpoints", &m_Checkpoints);
-	pBlackboard->AddData("housePositions", &m_HousePositions);
+	pBlackboard->AddData("houses", &m_Houses);
+	pBlackboard->AddData("items", &m_Items);
+	pBlackboard->AddData("inventory", &m_Inventory);
 	pBlackboard->AddData("locationOfNearestPistol", &m_LocationOfNearestPistol);
 	pBlackboard->AddData("locationOfNearestMedkit", &m_LocationOfNearestMedkit);
 	pBlackboard->AddData("locationOfNearestFood", &m_LocationOfNearestFood);
+	ItemsInInventory itemsInInventory{};
+	pBlackboard->AddData("itemsInInventory", itemsInInventory);
+
 
 	m_pBehaviorTree = new BehaviorTree
 	{ pBlackboard,
@@ -93,71 +112,34 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 									}}
 							}}
 					}},
+				new BehaviorSequence{ // == GRAB PICKUPS ==
+					{
+						new BehaviorConditional{IsFirstItemInGrabRange},
+						new BehaviorAction{GrabFirstItem}
+					}},
+				new BehaviorSequence{ // == FIND PICKUPS ==
+					{
+						new BehaviorConditional{ArePickupsInFOV},
+						new BehaviorSequence{
+							{
+								new BehaviorConditional{IsInventoryNotFull},
+								new BehaviorAction{GoToFirstItem}
+							}}
+					}},
 				new BehaviorSequence{ // == LOOK FOR HOUSE ==
 					{
 						new BehaviorConditional{IsHouseInFOV},
-						new BehaviorConditional{HasHouseNotBeenEntered},
-						new BehaviorAction{EnterHouse}
+						new BehaviorSequence{
+							{
+								new BehaviorConditional{HasCenterOfHouseNotBeenReached},
+								new BehaviorAction{EnterHouse}
+							}}
 					}},
 				new BehaviorSequence{ // == SEARCH PATTERN ==
 					{
 						new BehaviorConditional{HaveNotAllCheckpointsBeenReached},
 						new BehaviorAction{GoToUnvisitedCheckpoint}
 					}},
-		new BehaviorSequence{ // == FIND PICKUPS ==
-			{
-				new BehaviorConditional{ArePickupsInFOV},
-				new BehaviorSelector{
-					{
-						new BehaviorSequence{
-							{
-								new BehaviorConditional{IsHealthAboveHalf},
-								new BehaviorSelector{
-									{
-										new BehaviorSequence{
-											{
-												new BehaviorSequence{
-													{
-														new BehaviorConditional{IsPistolInFOV},
-														new BehaviorAction{GoToPistol}
-													}},
-												new BehaviorSequence{
-													{
-														new BehaviorConditional{IsPistolInGrabRange},
-														new BehaviorAction{GrabPistol}
-													}}
-											}},
-										new BehaviorSequence{
-											{
-												new BehaviorSequence{
-													{
-														new BehaviorConditional{IsMedkitInFOV},
-														new BehaviorAction{GoToMedkit}
-													}},
-												new BehaviorSequence{
-													{
-														new BehaviorConditional{IsMedkitInGrabRange},
-														new BehaviorAction{GrabMedkit}
-													}}
-											}},
-										new BehaviorSequence{
-											{
-												new BehaviorSequence{
-													{
-														new BehaviorConditional{IsFoodInFOV},
-														new BehaviorAction{GoToFood}
-													}},
-												new BehaviorSequence{
-													{
-														new BehaviorConditional{IsFoodInGrabRange},
-														new BehaviorAction{GrabFood}
-													}}
-											}}
-									}},
-
-							}},
-					}}
-			}},
 				//new BehaviorSequence{ == PROJECT FOR LATER ==
 				//{
 				//		new BehaviorConditional{HaveFiveSecondsPassed},
@@ -166,7 +148,7 @@ void Plugin::Initialize(IBaseInterface* pInterface, PluginInfo& info)
 				//		new BehaviorAction{TurnAroundToCheckForZombies},
 				//}},
 				new BehaviorAction{Wander} // == WANDER AROUND ==
-				}}
+		}}
 	};
 }
 //Called only once
@@ -184,11 +166,11 @@ void Plugin::DllShutdown()
 //Called only once, during initialization
 void Plugin::InitGameDebugParams(GameDebugParams& params)
 {
-	params.AutoFollowCam = true; //Automatically follow the AI? (Default = true)
+	params.AutoFollowCam = false; //Automatically follow the AI? (Default = true)
 	params.RenderUI = true; //Render the IMGUI Panel? (Default = true)
-	params.SpawnEnemies = true; //Do you want to spawn enemies? (Default = true)
+	params.SpawnEnemies = false; //Do you want to spawn enemies? (Default = true)
 	params.EnemyCount = 20; //How many enemies? (Default = 20)
-	params.GodMode = false; //GodMode > You can't die, can be usefull to inspect certain behaviours (Default = false)
+	params.GodMode = true; //GodMode > You can't die, can be usefull to inspect certain behaviours (Default = false)
 	params.AutoGrabClosestItem = true; //A call to Item_Grab(...) returns the closest item that can be grabbed. (EntityInfo argument is ignored)
 }
 
@@ -338,24 +320,18 @@ SteeringPlugin_Output Plugin::UpdateSteering(float dt)
 	{
 		m_pBehaviorTree->GetBlackboard()->ChangeData("timerForWander", (timerForWander + dt));
 	}
-	// == Update Checkpoints ==
-	const Rectf agentHitbox{ m_pInterface->Agent_GetInfo().Position,m_pInterface->Agent_GetInfo().AgentSize,m_pInterface->Agent_GetInfo().AgentSize };
-	for (auto& checkpoint : m_Checkpoints)
-	{
-		const float checkpointSize{ 5.f };
-		const Rectf checkpointHitbox{ checkpoint.position,checkpointSize,checkpointSize };
-		if (IsOverlapping(agentHitbox, checkpointHitbox))
-		{
-			checkpoint.hasBeenReached = true;
-			break; // we can only hit one checkpoint
-		}
-	}
 
+	UpdateCheckpoints();
 #pragma endregion
 
-	m_pBehaviorTree->Update(dt);
 	SteeringPlugin_Output steering{};
 	m_pBehaviorTree->GetBlackboard()->GetData("steeringOutput", steering);
+	steering.RunMode = false; // == So that we don't have to worry about resetting the runmode ==
+	m_pBehaviorTree->GetBlackboard()->ChangeData("steeringOutput", steering);
+
+	m_pBehaviorTree->Update(dt);
+	m_pBehaviorTree->GetBlackboard()->GetData("steeringOutput", steering);
+
 
 	return steering;
 }
@@ -367,24 +343,34 @@ void Plugin::Render(float dt) const
 	m_pInterface->Draw_SolidCircle(m_Target, .7f, { 0,0 }, { 1, 0, 0 });
 
 	for (const auto& point : m_Checkpoints)
+	{
 		m_pInterface->Draw_Point(point.position, 5.f, { 1.f,0.f,0.f });
+	}
 }
 
-bool Plugin::IsOverlapping(const Rectf& a, const Rectf& b) const
+void Plugin::UpdateCheckpoints()
 {
-	// If one rectangle is on left side of the other
-	if (a.bottomLeft.x + a.width < b.bottomLeft.x || b.bottomLeft.x + b.width < a.bottomLeft.x)
-	{
-		return false;
-	}
+	// == Update Checkpoints ==
+	const Rectf agentHitbox{ m_pInterface->Agent_GetInfo().Position,m_pInterface->Agent_GetInfo().AgentSize,m_pInterface->Agent_GetInfo().AgentSize };
 
-	// If one rectangle is under the other
-	if (a.bottomLeft.y > b.bottomLeft.y + b.height || b.bottomLeft.y > a.bottomLeft.y + a.height)
+	for (size_t i{}; i < m_Checkpoints.size(); ++i)
 	{
-		return false;
-	}
+		if (m_Checkpoints[i].hasBeenReached)
+			continue;
 
-	return true;
+		if (i > 0 && !m_Checkpoints[0].hasBeenReached)
+		{
+			break; // == Don't accidentally check any others ==
+		}
+
+		const float checkpointSize{ 2.f };
+		const Rectf checkpointHitbox{ m_Checkpoints[i].position,checkpointSize,checkpointSize };
+		if (Functions::IsOverlapping(agentHitbox, checkpointHitbox))
+		{
+			m_Checkpoints[i].hasBeenReached = true;
+			break; // we can only hit one checkpoint
+		}
+	}
 }
 
 vector<HouseInfo> Plugin::GetHousesInFOV() const

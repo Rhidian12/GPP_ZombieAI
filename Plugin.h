@@ -26,7 +26,7 @@ public:
 	void Render(float dt) const override;
 
 private:
-	bool IsOverlapping(const Rectf& a, const Rectf& b) const;
+	void UpdateCheckpoints();
 
 	//Interface, used to request data from/perform actions with the AI Framework
 	IExamInterface* m_pInterface = nullptr;
@@ -43,7 +43,9 @@ private:
 	BehaviorTree* m_pBehaviorTree{ nullptr };
 	//std::unordered_set<EntityInfoExtended, EntityInfoExtendedHash, EntityInfoExtendedEqual> m_EnemiesBehindUs{};
 	std::vector<Checkpoint> m_Checkpoints{};
-	std::unordered_set<Elite::Vector2, Vector2Hash, Vector2Equal> m_HousePositions{};
+	std::vector<House> m_Houses{};
+	std::vector<EntityInfo> m_Items{};
+	std::vector<ItemInfo> m_Inventory{};
 	EntityInfo m_LocationOfNearestPistol{};
 	EntityInfo m_LocationOfNearestMedkit{};
 	EntityInfo m_LocationOfNearestFood{};
